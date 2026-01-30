@@ -1,0 +1,12 @@
+# Render.com Blueprint
+# https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: pabbly-stt
+    env: docker
+    plan: starter  # $7/month - needed for Whisper model
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.10.0
