@@ -2,26 +2,26 @@ import os
 import tempfile
 from contextlib import asynccontextmanager
 
-import whisper
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from faster_whisper import WhisperModel
+from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-ALLOWED_EXTENSIONS = {".wav", ".webm", ".mp3"}
+MODEL_NAME = os.getenv("WHISPER_MODEL", "medium")
+ALLOWED_EXTENSIONS = {".wav", ".webm", ".mp3", ".ogg", ".m4a"}
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Load Whisper model on startup."""
-    print("Loading Whisper 'base' model...")
-    app.state.model = whisper.load_model("base")
-    print("Model loaded successfully.")
+    """Load faster-whisper model on startup."""
+    print(f"Loading faster-whisper '{MODEL_NAME}' model...")
+    app.state.model = WhisperModel(MODEL_NAME, device="cpu", compute_type="int8")
+    print(f"Model '{MODEL_NAME}' loaded successfully (faster-whisper, int8).")
     yield
 
 
 app = FastAPI(title="Local STT Service", lifespan=lifespan)
 
-# Enable CORS for Chrome extension
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -32,9 +32,12 @@ app.add_middleware(
 
 
 @app.post("/transcribe")
-async def transcribe(file: UploadFile = File(...)):
+async def transcribe(
+    file: UploadFile = File(...),
+    language: str = Query(default=None, description="Language code (en, hi, etc.) or None for auto-detect"),
+    task: str = Query(default="transcribe", description="'transcribe' or 'translate'"),
+):
     """Transcribe an audio file to text."""
-    # Validate file extension
     ext = os.path.splitext(file.filename or "")[1].lower()
     if ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(
@@ -42,7 +45,6 @@ async def transcribe(file: UploadFile = File(...)):
             detail=f"Unsupported file type '{ext}'. Allowed: {', '.join(ALLOWED_EXTENSIONS)}",
         )
 
-    # Save uploaded file to a temp location
     try:
         with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
             content = await file.read()
@@ -51,14 +53,24 @@ async def transcribe(file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to save file: {e}")
 
-    # Transcribe and translate to English
+    transcribe_opts = {
+        "task": task if task in ("transcribe", "translate") else "transcribe",
+        "beam_size": 5,
+        "best_of": 5,
+        "temperature": (0.0, 0.2, 0.4, 0.6, 0.8, 1.0),
+        "initial_prompt": "Hinglish and English conversation.",
+        "vad_filter": True,
+    }
+
+    if language and language != "auto":
+        transcribe_opts["language"] = language
+
     try:
-        result = app.state.model.transcribe(tmp_path, task="translate")
-        text = result.get("text", "").strip()
+        segments, _ = app.state.model.transcribe(tmp_path, **transcribe_opts)
+        text = " ".join(seg.text.strip() for seg in segments)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Transcription failed: {e}")
     finally:
-        # Cleanup temp file
         if os.path.exists(tmp_path):
             os.remove(tmp_path)
 
