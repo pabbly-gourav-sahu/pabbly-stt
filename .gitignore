@@ -1,14 +1,8 @@
-# Python
 venv/
 __pycache__/
 *.pyc
 .env
-
-# Test files
 *.wav
 *.mp3
-*.webm
-
-# IDE
-.vscode/
-.idea/
+*.ogg
+.DS_Store
