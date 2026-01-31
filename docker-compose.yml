@@ -1,0 +1,8 @@
+services:
+  stt:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - WHISPER_MODEL=small
+    restart: unless-stopped
