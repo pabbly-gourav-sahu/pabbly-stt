@@ -7,7 +7,7 @@ from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-MODEL_NAME = os.getenv("WHISPER_MODEL", "base")
+MODEL_NAME = os.getenv("WHISPER_MODEL", "small")
 ALLOWED_EXTENSIONS = {".wav", ".webm", ".mp3", ".ogg", ".m4a"}
 
 
